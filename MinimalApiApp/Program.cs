@@ -1,18 +1,36 @@
+using Microsoft.IdentityModel.Tokens;
+using MinimalApi.Endpoints;
+using System.Text;
 using TodoLibrary.DataAccess;
-using TodoLibrary.Models;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<ISqlDataAccess, SqlDataAccess>();
 builder.Services.AddSingleton<ITodoData, TodoData>();
 
+builder.Services.AddAuthentication("Bearer")
+    .AddJwtBearer(opts =>
+    {
+        opts.TokenValidationParameters = new()
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration.GetValue<string>("Authentication:Issuer"),
+            ValidAudience = builder.Configuration.GetValue<string>("Authentication:Audience"),
+            IssuerSigningKey = new SymmetricSecurityKey(
+                            Encoding.ASCII.GetBytes(builder.Configuration.GetValue<string>("Authentication:SecretKey")))
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -21,11 +39,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/api/Todos", async (ITodoData data) =>
-{
-    var output = await data.GetAllAssigned(1);
-    return Results.Ok(output);
-});
+app.UseAuthentication();
+app.UseAuthorization();
+app.AddAuthenticationEndpoints();
+app.AddTodoEndpoints();
 
 app.Run();
 
